@@ -100,6 +100,9 @@ def mavgen(opts, args) :
     elif opts.language == 'javascript':
         import mavgen_javascript
         mavgen_javascript.generate(opts.output, xml)
+    elif opts.language == 'squirrel':
+        import mavgen_nut
+        mavgen_nut.generate(opts.output, xml)
     else:
         print("Unsupported language %s" % opts.language)
     
@@ -116,7 +119,7 @@ def mavgen_validate(fname, schema, errorLimitNumber) :
 if __name__ == "__main__":
     from optparse import OptionParser
 
-    supportedLanguages = ["C", "CS", "JavaScript", "Python", "WLua"]
+    supportedLanguages = ["C", "CS", "JavaScript", "Python", "WLua", "Squirrel"]
     parser = OptionParser("%prog [options] <XML files>")
     parser.add_option("-o", "--output", dest="output", default="mavlink", help="output directory.")
     parser.add_option("--lang", dest="language", choices=supportedLanguages, default="Python", help="language of generated code, one of: {0} [default: %default]".format(supportedLanguages))
