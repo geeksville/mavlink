@@ -38,53 +38,64 @@ def generate_enums(outf, enums):
         outf.write("\n// %s\n" % e.name)
         
         for entry in e.entry:
-            outf.write("const %s = %u // %s\n" % (entry.name, entry.value, wrapper.fill(entry.description)))
+            genconst(outf, entry.name, entry.value)
+            # FIXME - use entry.description
 
 def generate_message_ids(outf, msgs):
     print("Generating message IDs")
     outf.write("\n// message IDs\n")
-    outf.write("const MAVLINK_MSG_ID_BAD_DATA = -1\n")
+    genconst(outf, "MSG_BAD_DATA", -1)
     for m in msgs:
-        outf.write("const MAVLINK_MSG_ID_%s = %u\n" % (m.name.upper(), m.id))
+        genconst(outf, "MSG_" + m.name.upper(), m.id)
 
-def generate_classes(outf, msgs):
+def genconst(outf, name, v):
+    outf.write("MAV.%s <- %d\n" % (name, v))
+
+def generate_classes(dirname, msgs):
+    '''Write each class to its own filename (each file named msgid.nut)'''
+    print("Generating class definitions")
+    for m in msgs:
+        outf = open(dirname + "/" + str(m.id) + ".nut", "w")
+        generate_class(outf, m)
+        outf.close()
+
+def generate_class(outf, m):
     print("Generating class definitions")
     wrapper = textwrap.TextWrapper(initial_indent="        ", subsequent_indent="        ")
-    for m in msgs:
-        outf.write("""
+
+    outf.write("""
 /*
 %s
 */
-class MAV.%s extends MAV.Message {
+return class extends MAV.Message {
     constructor() {
         base.constructor()
-        this.messageId = MAVLINK_MSG_ID_%s
     }
-""" % (wrapper.fill(m.description.strip()), m.name, m.name.upper()))
+""" % (wrapper.fill(m.description.strip())))
 
-        outf.write('    static classname = "%s"\n' % m.name)
-        outf.write('    static crcExtra = %s\n' % m.crc_extra)
-        if len(m.fieldnames) != 0:
-                outf.write('    static fieldNames = ["%s"]\n' % '", "'.join(m.fieldnames))
-        outf.write("\n")
+    outf.write('    static classname = "%s"\n' % m.name)
+    outf.write('    static crcExtra = %s\n' % m.crc_extra)
+    if len(m.fieldnames) != 0:
+        outf.write('    static fieldNames = ["%s"]\n' % '", "'.join(m.fieldnames))
+    outf.write("\n")
 
-        for f in m.fields:
-                outf.write("    %s = 0\n" % (f.name))
-        outf.write("\n")
+    for f in m.fields:
+        outf.write("    %s = 0\n" % (f.name))
+    outf.write("\n")
 
-        # FIXME - use a more code space efficient encoding?
-        outf.write("    function packPayload(b) {\n")
-        for f in m.ordered_fields:
-            outf.write("        writea(b, %s, '%s', %s)\n" % (f.name, mavfmt(f), f.array_length))
-        outf.write("    }\n")
-        # FIXME - use crc_extra
-        # FIXME - need to init arrays in constructor
-        outf.write("    function unpackPayload(b) {\n")
-        for f in m.ordered_fields:
-            outf.write("        %s = reada(b, '%s', %s)\n" % (f.name, mavfmt(f), f.array_length))
-        outf.write("    }\n")
-
-        outf.write("}\n\n")
+    # FIXME - use a more code space efficient encoding?
+    outf.write("    function packPayload(b) {\n")
+    for f in m.ordered_fields:
+        outf.write("        writea(b, %s, '%s', %s)\n" % (f.name, mavfmt(f), f.array_length))
+    outf.write("    }\n")
+    # FIXME - use crc_extra
+    # FIXME - need to init arrays in constructor
+    outf.write("    function unpackPayload(b) {\n")
+    for f in m.ordered_fields:
+        outf.write("        %s = reada(b, '%s', %s)\n" % (f.name, mavfmt(f), f.array_length))
+    outf.write("    }\n")
+    
+    outf.write("}\n\n")
 
 def mavfmt(field):
     '''work out the struct format for a type'''
@@ -106,66 +117,18 @@ def mavfmt(field):
     return map[field.type]
 
 def generate_dispatcher(outf, msgs):
+    '''NO LONGER USED - we now construct table at runtime'''
     print("Generating dispatcher")
 
     for m in msgs:
-        outf.write("MAV.Map[MAVLINK_MSG_ID_%s] <- MAV.%s\n" % (
+        outf.write("MAV.Map[MAV_%s] <- MAV.%s\n" % (
             m.name.upper(), m.name))
 
-def generate_methods(outf, msgs):
-    print("Generating methods")
-
-    def field_descriptions(fields):
-        ret = ""
-        for f in fields:
-            ret += "                %-18s        : %s (%s)\n" % (f.name, f.description.strip(), f.type)
-        return ret
-
-    wrapper = textwrap.TextWrapper(initial_indent="", subsequent_indent="                ")
-
-    for m in msgs:
-        comment = "%s\n\n%s" % (wrapper.fill(m.description.strip()), field_descriptions(m.fields))
-
-        selffieldnames = 'self, '
-        for f in m.fields:
-            if f.omit_arg:
-                selffieldnames += '%s=%s, ' % (f.name, f.const_value)
-            else:
-                selffieldnames += '%s, ' % f.name
-        selffieldnames = selffieldnames[:-2]
-
-        sub = {'NAMELOWER'      : m.name.lower(),
-               'SELFFIELDNAMES' : selffieldnames,
-               'COMMENT'        : comment,
-               'FIELDNAMES'     : ", ".join(m.fieldnames)}
-
-        t.write(outf, """
-        def ${NAMELOWER}_encode(${SELFFIELDNAMES}):
-                '''
-                ${COMMENT}
-                '''
-                msg = MAVLink_${NAMELOWER}_message(${FIELDNAMES})
-                msg.pack(self)
-                return msg
-            
-""", sub)
-
-        t.write(outf, """
-        def ${NAMELOWER}_send(${SELFFIELDNAMES}):
-                '''
-                ${COMMENT}
-                '''
-                return self.send(self.${NAMELOWER}_encode(${FIELDNAMES}))
-            
-""", sub)
 
 
 def generate(basename, xml):
     '''generate complete Squirrel implemenation'''
-    if basename.endswith('.nut'):
-        filename = basename
-    else:
-        filename = basename + '.nut'
+    filename = basename + '/generated.nut'
 
     msgs = []
     enums = []
@@ -191,8 +154,7 @@ def generate(basename, xml):
     generate_preamble(outf, msgs, filelist, xml[0])
     generate_enums(outf, enums)
     generate_message_ids(outf, msgs)
-    generate_classes(outf, msgs)
-    generate_dispatcher(outf, msgs)
-    #generate_methods(outf, msgs)
+    generate_classes(basename, msgs)
+    # generate_dispatcher(outf, msgs)
     outf.close()
     print("Generated %s OK" % filename)
