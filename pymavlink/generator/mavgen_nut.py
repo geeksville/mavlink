@@ -62,6 +62,7 @@ class MAV.%s extends MAV.Message {
     }
 """ % (wrapper.fill(m.description.strip()), m.name, m.name.upper()))
 
+        outf.write('    static classname = "%s"\n' % m.name)
         outf.write('    static crcExtra = %s\n' % m.crc_extra)
         if len(m.fieldnames) != 0:
                 outf.write('    static fieldNames = ["%s"]\n' % '", "'.join(m.fieldnames))
@@ -82,6 +83,7 @@ class MAV.%s extends MAV.Message {
         for f in m.ordered_fields:
             outf.write("        %s = reada(b, '%s', %s)\n" % (f.name, mavfmt(f), f.array_length))
         outf.write("    }\n")
+
         outf.write("}\n\n")
 
 def mavfmt(field):
