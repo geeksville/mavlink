@@ -14,11 +14,9 @@ from math import degrees
 import json
 from pymavlink.dialects.v10 import ardupilotmega
 
-search_dirs = ['c:\Program Files\APM Planner',
-               'c:\Program Files\Mission Planner',
-               'c:\Program Files (x86)\APM Planner',
-               'c:\Program Files (x86)\Mission Planner']
-results = 'SearchResults.zip'
+search_dirs = ['.' ]
+homedir = os.path.expanduser("~")
+results = homedir + '/SearchResults.zip'
 email = 'Craig Elder <craig@3drobotics.com>'
 
 def IMUCheckFail(filename):
@@ -141,26 +139,20 @@ def match_extension(f):
     (root,ext) = os.path.splitext(f)
     return ext.lower() in extensions
 
-for d in directories:
-    if not os.path.exists(d):
-        continue
-    if os.path.isdir(d):
-        print("Searching in %s" % d)
-        for (root, dirs, files) in os.walk(d):
-            for f in files:
-                if not match_extension(f):
-                    continue
-                path = os.path.join(root, f)
-                filelist.append(path)
-    elif match_extension(d):
-        filelist.append(d)
+with open('tloglist') as f:
+    filelist = f.readlines()
 
-for i in range(len(filelist)):
-    f = filelist[i]
+matchdir = homedir + '/matches'
+if not os.path.exists(homedir):
+    os.mkdir(matchdir)
+import shutil
+for i in range(0, len(filelist)):
+    f = filelist[i].rstrip('\n')
     print("Checking %s ... [found=%u i=%u/%u]" % (f, len(found), i, len(filelist)))
     try:
         if IMUCheckFail(f):
             found.append(f)
+	    shutil.copyfile(f, matchdir + '/' + os.path.basename(f))
     except Exception as e:
         print("Failed - %s" % e)
         continue
